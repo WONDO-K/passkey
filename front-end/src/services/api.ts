@@ -11,7 +11,7 @@ export const api = {
         body: JSON.stringify(data),
       });
       if (!response.ok) {
-        throw new Error('Network response was not ok');
+        throw new Error('Network response was not ok 1');
       }
       const result = await response.json();
       console.log('API response data:', result); // 서버 응답 확인
@@ -26,7 +26,7 @@ export const api = {
     try {
       const response = await fetch(`${API_BASE_URL}${endpoint}`);
       if (!response.ok) {
-        throw new Error('Network response was not ok');
+        throw new Error('Network response was not ok 2');
       }
       const result = await response.json();
       console.log('API response data:', result); // 서버 응답 확인

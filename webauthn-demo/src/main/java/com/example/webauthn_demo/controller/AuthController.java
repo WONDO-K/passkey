@@ -11,10 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Base64;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @RestController
@@ -53,23 +50,25 @@ public class AuthController {
         }
     }
 
-
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody RegistrationRequest request) {
         try {
             log.info("클라이언트로부터 전달받은 request: {}", request);
-            log.info("클라이언트로부터 전달받은 id :{}", request.getId());
+            log.info("클라이언트로부터 전달받은 id :{}", request.getCredential().getId());
             log.info("회원 가입 요청을 받았습니다. 사용자 이름: {}", request.getUsername());
 
-            if (request.getId() == null || request.getId().isEmpty()) {
+            // ID 검증
+            if (request.getCredential().getId() == null || request.getCredential().getId().isEmpty()) {
                 throw new IllegalArgumentException("유효하지 않은 ID: ID는 null이거나 빈 값일 수 없습니다.");
             }
 
-            ByteArray id = new ByteArray(Base64.getUrlDecoder().decode(request.getId()));
-            ByteArray rawId = new ByteArray(Base64.getUrlDecoder().decode(request.getRawId()));
-            ByteArray clientDataJSON = new ByteArray(Base64.getUrlDecoder().decode(request.getAttestation().getClientDataJSON()));
-            ByteArray attestationObject = new ByteArray(Base64.getUrlDecoder().decode(request.getAttestation().getAttestationObject()));
+            // ByteArray로 변환
+            ByteArray id = new ByteArray(Base64.getUrlDecoder().decode(request.getCredential().getId()));
+            ByteArray rawId = new ByteArray(request.getCredential().getRawId());
+            ByteArray clientDataJSON = new ByteArray(request.getCredential().getResponse().getClientDataJSON());
+            ByteArray attestationObject = new ByteArray(request.getCredential().getResponse().getAttestationObject());
 
+            // AuthenticatorAttestationResponse 생성
             AuthenticatorAttestationResponse attestationResponse = AuthenticatorAttestationResponse.builder()
                     .attestationObject(attestationObject)
                     .clientDataJSON(clientDataJSON)
@@ -79,10 +78,10 @@ public class AuthController {
                     PublicKeyCredential.<AuthenticatorAttestationResponse, ClientRegistrationExtensionOutputs>builder()
                             .id(id)
                             .response(attestationResponse)
-                            .clientExtensionResults(request.getClientExtensionResults())
-                            .type(PublicKeyCredentialType.PUBLIC_KEY)
+                            .clientExtensionResults(request.getClientExtensionResults()) // 빈 값으로 설정
                             .build();
 
+            // 사용자 등록 처리
             log.info("사용자 등록 성공 전 : {}", request.getUsername());
             authService.finishRegistration(request.getUsername(), credential, rawId);
             log.info("사용자 등록 성공: {}", request.getUsername());
@@ -91,12 +90,12 @@ public class AuthController {
             Map<String, Object> response = new HashMap<>();
             response.put("username", request.getUsername());
             response.put("credential", Map.of(
-                    "id", request.getId(),
-                    "rawId", request.getRawId(),
+                    "id", request.getCredential().getId(),
+                    "rawId", request.getCredential().getRawId(), // byte[]를 그대로 반환
                     "type", "public-key",
                     "response", Map.of(
-                            "attestationObject", request.getAttestation().getAttestationObject(),
-                            "clientDataJSON", request.getAttestation().getClientDataJSON()
+                            "attestationObject", request.getCredential().getResponse().getAttestationObject(),
+                            "clientDataJSON", request.getCredential().getResponse().getClientDataJSON()
                     )
             ));
 
@@ -109,6 +108,7 @@ public class AuthController {
             return ResponseEntity.badRequest().body("등록 실패: " + e.getMessage());
         }
     }
+
 
     @GetMapping("/login-options")
     public ResponseEntity<AssertionRequest> getLoginOptions() {
@@ -134,6 +134,9 @@ public class AuthController {
             ByteArray userHandle = request.getAssertion().getUserHandle() != null
                     ? new ByteArray(Base64.getUrlDecoder().decode(request.getAssertion().getUserHandle()))
                     : null;
+
+            log.info("Received login request for id: {}", request.getId());
+            log.info("Received rawId: {}", request.getRawId());
 
             AuthenticatorAssertionResponse assertionResponse = AuthenticatorAssertionResponse.builder()
                     .authenticatorData(authenticatorData)

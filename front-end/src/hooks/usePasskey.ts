@@ -35,21 +35,26 @@ export const usePasskey = () => {
         }) as PublicKeyCredential;
 
         console.log('Created credential:', credential);
+        console.log('id:', credential.id);
+        console.log('rawId:', credential.rawId);
 
         const payload = {
           username,
+          challenge: Array.from(new Uint8Array(options.challenge)), // 서버에 challenge 보내기
           credential: {
             id: credential.id,
-            rawId: Array.from(new Uint8Array(credential.rawId)),
+            rawId: btoa(String.fromCharCode(...Array.from(new Uint8Array(credential.rawId)))), // Base64 인코딩
             type: credential.type,
             response: {
               attestationObject: Array.from(new Uint8Array((credential.response as AuthenticatorAttestationResponse).attestationObject)),
               clientDataJSON: Array.from(new Uint8Array((credential.response as AuthenticatorAttestationResponse).clientDataJSON)),
             },
           },
+          clientExtensionResults: {} // 빈 객체로 초기화하여 전송
         };
 
         console.log('Serialized data:', JSON.stringify(payload));
+        console.log(payload);
 
         await api.post('/auth/register', payload);
 
@@ -84,8 +89,9 @@ export const usePasskey = () => {
           publicKey: options,
         }) as PublicKeyCredential;
 
-        await api.post('/auth/login', {
+        const payload = {
           username,
+          challenge: Array.from(new Uint8Array(options.challenge)), // 서버에 challenge 보내기
           credential: {
             id: credential.id,
             rawId: Array.from(new Uint8Array(credential.rawId)),
@@ -99,7 +105,12 @@ export const usePasskey = () => {
                 : null,
             },
           },
-        });
+        };
+
+        console.log('Serialized data:', JSON.stringify(payload));
+        console.log(payload);
+
+        await api.post('/auth/login', payload);
 
         return true;
       } else {
@@ -114,6 +125,3 @@ export const usePasskey = () => {
 
   return { registerPasskey, authenticateWithPasskey, error };
 };
-
-
-

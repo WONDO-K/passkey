@@ -12,6 +12,7 @@ import com.yubico.webauthn.data.*;
 import com.yubico.webauthn.exception.AssertionFailedException;
 import com.yubico.webauthn.exception.RegistrationFailedException;
 import jakarta.annotation.PostConstruct;
+import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,6 +43,7 @@ public class AuthService {
     private RelyingParty relyingParty;
     private final SecureRandom random = new SecureRandom();
     private final Logger log = LoggerFactory.getLogger(getClass());
+    private final HttpSession httpSession;
 
     @PostConstruct
     public void init() {
@@ -82,10 +84,15 @@ public class AuthService {
                     .id(userId)
                     .build();
 
+            ByteArray challenge = generateChallenge();
+
+            // 챌린지를 세션에 저장합니다.
+            httpSession.setAttribute("challenge", challenge);
+
             PublicKeyCredentialCreationOptions options = PublicKeyCredentialCreationOptions.builder()
                     .rp(relyingParty.getIdentity())
                     .user(userIdentity)
-                    .challenge(generateChallenge())
+                    .challenge(challenge)
                     .pubKeyCredParams(List.of(
                             PublicKeyCredentialParameters.builder()
                                     .alg(COSEAlgorithmIdentifier.ES256)
@@ -109,6 +116,13 @@ public class AuthService {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
+        // 세션에서 챌린지를 불러옵니다.
+        ByteArray savedChallenge = (ByteArray) httpSession.getAttribute("challenge");
+        if (savedChallenge == null) {
+            log.error("No challenge found in session for user: {}", username);
+            throw new IllegalStateException("No challenge found in session");
+        }
+
         FinishRegistrationOptions options = FinishRegistrationOptions.builder()
                 .request(PublicKeyCredentialCreationOptions.builder()
                         .rp(relyingParty.getIdentity())
@@ -117,7 +131,7 @@ public class AuthService {
                                 .displayName(user.getDisplayName())
                                 .id(new ByteArray(user.getId().toString().getBytes()))
                                 .build())
-                        .challenge(generateChallenge())
+                        .challenge(savedChallenge) // 저장된 챌린지를 사용
                         .pubKeyCredParams(List.of(PublicKeyCredentialParameters.ES256))
                         .build())
                 .response(credential)
