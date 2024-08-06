@@ -1,0 +1,10 @@
+x-environments: &default
+  env_file: .env # 기본 환경 파일을 지정합니다.
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    ports:
+      - "3306:3306"
+    <<: *default
+
