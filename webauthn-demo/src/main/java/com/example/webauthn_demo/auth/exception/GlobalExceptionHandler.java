@@ -1,4 +1,4 @@
-package com.example.webauthn_demo.exception;
+package com.example.webauthn_demo.auth.exception;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;

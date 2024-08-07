@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { api } from '../services/api';
 
 function base64UrlToBuffer(base64Url: string): ArrayBuffer {
-  console.log('base64Url received:', base64Url);
   const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-  const binaryString = window.atob(base64);
+  const paddedBase64 = base64.padEnd(base64.length + (4 - base64.length % 4) % 4, '=');
+  const binaryString = window.atob(paddedBase64);
   const bytes = new Uint8Array(binaryString.length);
-  console.log('Converted ArrayBuffer:', bytes.buffer);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
   return bytes.buffer;
 }
 
@@ -43,7 +45,8 @@ export const usePasskey = () => {
           challenge: Array.from(new Uint8Array(options.challenge)), // 서버에 challenge 보내기
           credential: {
             id: credential.id,
-            rawId: btoa(String.fromCharCode(...Array.from(new Uint8Array(credential.rawId)))), // Base64 인코딩
+            rawId: btoa(String.fromCharCode(...Array.from(new Uint8Array(credential.rawId))))
+              .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''), // Base64 URL-safe 인코딩
             type: credential.type,
             response: {
               attestationObject: Array.from(new Uint8Array((credential.response as AuthenticatorAttestationResponse).attestationObject)),

@@ -1,4 +1,4 @@
-package com.example.webauthn_demo.model;
+package com.example.webauthn_demo.auth.model;
 
 import jakarta.persistence.*;
 import lombok.Data;

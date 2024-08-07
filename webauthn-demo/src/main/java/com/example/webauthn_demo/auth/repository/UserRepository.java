@@ -1,6 +1,6 @@
-package com.example.webauthn_demo.repository;
+package com.example.webauthn_demo.auth.repository;
 
-import com.example.webauthn_demo.model.User;
+import com.example.webauthn_demo.auth.model.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;

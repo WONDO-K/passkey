@@ -1,4 +1,4 @@
-package com.example.webauthn_demo.dto;
+package com.example.webauthn_demo.auth.dto;
 
 
 import com.yubico.webauthn.data.ClientAssertionExtensionOutputs;

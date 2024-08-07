@@ -1,4 +1,4 @@
-package com.example.webauthn_demo.config;
+package com.example.webauthn_demo.auth.config;
 
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;

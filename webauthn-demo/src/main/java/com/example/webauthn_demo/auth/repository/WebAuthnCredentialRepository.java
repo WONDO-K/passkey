@@ -1,6 +1,5 @@
-package com.example.webauthn_demo.repository;
+package com.example.webauthn_demo.auth.repository;
 
-import com.example.webauthn_demo.model.Passkey;
 import com.yubico.webauthn.CredentialRepository;
 import com.yubico.webauthn.RegisteredCredential;
 import com.yubico.webauthn.data.ByteArray;
