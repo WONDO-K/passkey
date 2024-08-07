@@ -110,15 +110,15 @@ public class AuthService {
             log.info("사용자 이름: {}", username);  // username 로깅
 
             byte[] expectedChallenge = challengeService.getChallenge(username);
-            log.info("Redis에서 가져온 챌린지: {}", expectedChallenge != null ? Base64.getUrlEncoder().encodeToString(expectedChallenge) : "null");
+            log.info("Redis에서 가져온 챌린지: {}", expectedChallenge != null ? Base64Util.toBase64(expectedChallenge) : "null");
 
             if (expectedChallenge == null) {
                 log.info("Redis에서 챌린지를 찾을 수 없습니다. 사용자 이름: {}", username);
                 throw new IllegalArgumentException("등록 요청에 대한 챌린지를 찾을 수 없습니다.");
             }
 
-            // 클라이언트에서 전송된 clientDataJSON을 Base64 디코딩하여 바이트 배열로 변환
-            byte[] clientDataJSON = Base64Util.fromBase64(request.getCredential().getResponse().getClientDataJSON());
+            // 클라이언트에서 전송된 clientDataJSON을 URL-safe Base64 디코딩하여 바이트 배열로 변환
+            byte[] clientDataJSON = Base64Util.fromBase64UrlToByteArray(request.getCredential().getResponse().getClientDataJSON());
 
             // 디코딩된 바이트 배열을 JSON으로 파싱
             ObjectMapper objectMapper = new ObjectMapper();
@@ -127,8 +127,8 @@ public class AuthService {
             log.info("클라이언트에서 받은 챌린지 (Base64): {}", clientChallenge);
 
             // Base64로 인코딩된 챌린지를 디코딩하여 비교 (Base64Util 사용)
-            byte[] decodedClientChallenge = Base64Util.fromBase64(clientChallenge);
-            log.info("디코딩된 클라이언트 챌린지: {}", Base64.getUrlEncoder().encodeToString(decodedClientChallenge));
+            byte[] decodedClientChallenge = Base64Util.fromBase64UrlToByteArray(clientChallenge);
+            log.info("디코딩된 클라이언트 챌린지: {}", Base64Util.toBase64(decodedClientChallenge));
 
             // 클라이언트에서 전송된 챌린지와 비교
             if (!Arrays.equals(expectedChallenge, decodedClientChallenge)) {
@@ -199,10 +199,10 @@ public class AuthService {
             RegistrationRequest request) {
         try {
             // URL-safe Base64 문자열을 일반 Base64로 변환하여 처리
-            ByteArray id = Base64Util.fromBase64ToByteArray(request.getCredential().getId());
-            ByteArray rawId = Base64Util.fromBase64ToByteArray(request.getCredential().getRawId());
-            ByteArray clientDataJSON = Base64Util.fromBase64ToByteArray(request.getCredential().getResponse().getClientDataJSON());
-            ByteArray attestationObject = Base64Util.fromBase64ToByteArray(request.getCredential().getResponse().getAttestationObject());
+            ByteArray id = new ByteArray(Base64Util.fromBase64UrlToByteArray(request.getCredential().getId()));
+            ByteArray rawId = new ByteArray(Base64Util.fromBase64UrlToByteArray(request.getCredential().getRawId()));
+            ByteArray clientDataJSON = new ByteArray(Base64Util.fromBase64UrlToByteArray(request.getCredential().getResponse().getClientDataJSON()));
+            ByteArray attestationObject = new ByteArray(Base64Util.fromBase64UrlToByteArray(request.getCredential().getResponse().getAttestationObject()));
 
             // AttestationResponse 빌드
             AuthenticatorAttestationResponse attestationResponse = AuthenticatorAttestationResponse.builder()
@@ -226,13 +226,13 @@ public class AuthService {
     private PublicKeyCredential<AuthenticatorAssertionResponse, ClientAssertionExtensionOutputs> buildAuthenticationCredential(
             AuthenticationRequest request) {
         try {
-            // 일반 Base64 -> ByteArray로 변환하여 처리
-            ByteArray id = new ByteArray(Base64.getDecoder().decode(request.getId()));
-            ByteArray clientDataJSON = new ByteArray(Base64.getDecoder().decode(request.getAssertion().getClientDataJSON()));
-            ByteArray authenticatorData = new ByteArray(Base64.getDecoder().decode(request.getAssertion().getAuthenticatorData()));
-            ByteArray signature = new ByteArray(Base64.getDecoder().decode(request.getAssertion().getSignature()));
+            // URL-safe Base64 -> ByteArray로 변환하여 처리
+            ByteArray id = new ByteArray(Base64Util.fromBase64UrlToByteArray(request.getId()));
+            ByteArray clientDataJSON = new ByteArray(Base64Util.fromBase64UrlToByteArray(request.getAssertion().getClientDataJSON()));
+            ByteArray authenticatorData = new ByteArray(Base64Util.fromBase64UrlToByteArray(request.getAssertion().getAuthenticatorData()));
+            ByteArray signature = new ByteArray(Base64Util.fromBase64UrlToByteArray(request.getAssertion().getSignature()));
             ByteArray userHandle = request.getAssertion().getUserHandle() != null
-                    ? new ByteArray(Base64.getDecoder().decode(request.getAssertion().getUserHandle()))
+                    ? new ByteArray(Base64Util.fromBase64UrlToByteArray(request.getAssertion().getUserHandle()))
                     : null;
 
             // AssertionResponse 빌드

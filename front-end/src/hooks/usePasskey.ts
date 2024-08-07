@@ -13,11 +13,23 @@ function base64UrlToBuffer(base64Url: string): ArrayBuffer {
   return bytes.buffer;
 }
 
-// ArrayBuffer를 Base64 문자열로 변환하는 함수
-function bufferToBase64(buffer: ArrayBuffer): string {
+// 일반 Base64 문자열을 ArrayBuffer로 변환하는 함수
+function base64ToBuffer(base64: string): ArrayBuffer {
+  const binaryString = window.atob(base64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+// ArrayBuffer를 Base64 URL-safe 문자열로 변환하는 함수
+function bufferToBase64Url(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
-  const binary = String.fromCharCode(...Array.from(bytes));
-  return btoa(binary); // 일반 Base64 인코딩
+  let binary = '';
+  bytes.forEach(byte => binary += String.fromCharCode(byte));
+  const base64 = btoa(binary); // 일반 Base64 인코딩
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); // URL-safe Base64로 변환
 }
 
 export const usePasskey = () => {
@@ -30,14 +42,15 @@ export const usePasskey = () => {
       console.log('서버에서 받은 Response:', options);
 
       if (options && options.challenge && options.user && options.user.id) {
-        // Base64 URL-safe -> 일반 Base64로 변환 후 ArrayBuffer로 변환
-        options.challenge = base64UrlToBuffer(options.challenge);
-        options.user.id = base64UrlToBuffer(options.user.id);
+        // 서버에서 받은 challenge와 user.id 값을 적절히 변환
+        // Base64 URL-safe인 경우에는 base64UrlToBuffer를 사용하고, 일반 Base64인 경우에는 base64ToBuffer를 사용
+        options.challenge = base64UrlToBuffer(options.challenge); // 일반적으로 URL-safe 형식으로 변환
+        options.user.id = base64ToBuffer(options.user.id); // 일반 Base64 처리
 
         if (options.excludeCredentials) {
           options.excludeCredentials = options.excludeCredentials.map((cred: any) => ({
             ...cred,
-            id: base64UrlToBuffer(cred.id),
+            id: base64ToBuffer(cred.id), // 일반 Base64 처리
           }));
         }
       }
@@ -54,22 +67,21 @@ export const usePasskey = () => {
         username,
         challenge: Array.from(new Uint8Array(options.challenge)), // 서버에 challenge 보내기
         credential: {
-          id: bufferToBase64(credential.rawId), // 일반 Base64로 변환 후 전송
-          rawId: bufferToBase64(credential.rawId), // 일반 Base64 인코딩
+          id: bufferToBase64Url(credential.rawId), // URL-safe Base64로 변환 후 전송
+          rawId: bufferToBase64Url(credential.rawId), // URL-safe Base64로 변환 후 전송
           type: credential.type,
           response: {
-            attestationObject: bufferToBase64((credential.response as AuthenticatorAttestationResponse).attestationObject), // 일반 Base64로 변환 후 전송
-            clientDataJSON: bufferToBase64((credential.response as AuthenticatorAttestationResponse).clientDataJSON), // 일반 Base64로 변환 후 전송
+            attestationObject: bufferToBase64Url((credential.response as AuthenticatorAttestationResponse).attestationObject), // URL-safe Base64로 변환 후 전송
+            clientDataJSON: bufferToBase64Url((credential.response as AuthenticatorAttestationResponse).clientDataJSON), // URL-safe Base64로 변환 후 전송
           },
         },
         clientExtensionResults: {} // 빈 객체로 초기화하여 전송
       };
-      
+
       console.log('Serialized data:', JSON.stringify(payload));
       console.log(payload);
-      
+
       await api.post('/auth/register', payload);
-      
 
       return true;
     } catch (err) {
@@ -86,12 +98,13 @@ export const usePasskey = () => {
       console.log('Received login options:', options);
 
       if (options && options.challenge) {
+        // Base64 URL-safe 형식으로 변환
         options.challenge = base64UrlToBuffer(options.challenge);
 
         if (options.allowCredentials) {
           options.allowCredentials = options.allowCredentials.map((cred: any) => ({
             ...cred,
-            id: base64UrlToBuffer(cred.id),
+            id: base64ToBuffer(cred.id), // 일반 Base64 처리
           }));
         }
       }
@@ -99,28 +112,28 @@ export const usePasskey = () => {
       const credential = await navigator.credentials.get({
         publicKey: options,
       }) as PublicKeyCredential;
-      
+
       const payload = {
         username,
         challenge: Array.from(new Uint8Array(options.challenge)), // 서버에 challenge 보내기
         credential: {
-          id: bufferToBase64(credential.rawId), // 일반 Base64로 변환 후 전송
-          rawId: bufferToBase64(credential.rawId), // 일반 Base64로 변환 후 전송
+          id: bufferToBase64Url(credential.rawId), // URL-safe Base64로 변환 후 전송
+          rawId: bufferToBase64Url(credential.rawId), // URL-safe Base64로 변환 후 전송
           type: credential.type,
           response: {
-            authenticatorData: bufferToBase64((credential.response as AuthenticatorAssertionResponse).authenticatorData), // 일반 Base64로 변환 후 전송
-            clientDataJSON: bufferToBase64((credential.response as AuthenticatorAssertionResponse).clientDataJSON), // 일반 Base64로 변환 후 전송
-            signature: bufferToBase64((credential.response as AuthenticatorAssertionResponse).signature), // 일반 Base64로 변환 후 전송
+            authenticatorData: bufferToBase64Url((credential.response as AuthenticatorAssertionResponse).authenticatorData), // URL-safe Base64로 변환 후 전송
+            clientDataJSON: bufferToBase64Url((credential.response as AuthenticatorAssertionResponse).clientDataJSON), // URL-safe Base64로 변환 후 전송
+            signature: bufferToBase64Url((credential.response as AuthenticatorAssertionResponse).signature), // URL-safe Base64로 변환 후 전송
             userHandle: (credential.response as AuthenticatorAssertionResponse).userHandle
-              ? bufferToBase64((credential.response as AuthenticatorAssertionResponse).userHandle as ArrayBuffer)
+              ? bufferToBase64Url((credential.response as AuthenticatorAssertionResponse).userHandle as ArrayBuffer)
               : null,
           },
         },
       };
-      
+
       console.log('Serialized data:', JSON.stringify(payload));
       console.log(payload);
-      
+
       await api.post('/auth/login', payload);
 
       return true;
