@@ -31,7 +31,7 @@ public class AuthController {
             log.info("Generated register-options: {}", response);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            log.error("Error generating register-options for username", e);
+            log.info("Error generating register-options for username", e);
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
@@ -43,21 +43,21 @@ public class AuthController {
             authService.registerUser(request, session);
             return ResponseEntity.ok().build();
         } catch (Exception e) {
-            log.error("Registration failed for username: {}", request.getUsername(), e);
+            log.info("Registration failed for username: {}", request.getUsername(), e);
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 
     @GetMapping("/login-options")
-    public ResponseEntity<AssertionRequest> getLoginOptions(HttpSession session) {
+    public ResponseEntity<?> getLoginOptions(HttpSession session) {
         try {
             log.info("Received login-options request");
             AssertionRequest options = authService.startAuthentication();
             log.info("Generated login-options");
             return ResponseEntity.ok(options);
         } catch (Exception e) {
-            log.error("Error generating login-options", e);
-            return ResponseEntity.badRequest().body(null);
+            log.info("Error generating login-options", e);
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
@@ -70,11 +70,11 @@ public class AuthController {
                 log.info("User authentication successful for id: {}", request.getId());
                 return ResponseEntity.ok().build();
             } else {
-                log.warn("Authentication failed for id: {}", request.getId());
+                log.info("Authentication failed for id: {}", request.getId());
                 return ResponseEntity.badRequest().body("Authentication failed");
             }
         } catch (Exception e) {
-            log.error("Authentication failed for id: {}", request.getId(), e);
+            log.info("Authentication failed for id: {}", request.getId(), e);
             return ResponseEntity.badRequest().body("Authentication failed: " + e.getMessage());
         }
     }

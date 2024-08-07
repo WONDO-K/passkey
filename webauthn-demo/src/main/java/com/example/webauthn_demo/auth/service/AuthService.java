@@ -26,6 +26,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.*;
 
@@ -112,24 +113,26 @@ public class AuthService {
             log.info("Redis에서 가져온 챌린지: {}", expectedChallenge != null ? Base64.getUrlEncoder().encodeToString(expectedChallenge) : "null");
 
             if (expectedChallenge == null) {
-                log.error("Redis에서 챌린지를 찾을 수 없습니다. 사용자 이름: {}", username);
+                log.info("Redis에서 챌린지를 찾을 수 없습니다. 사용자 이름: {}", username);
                 throw new IllegalArgumentException("등록 요청에 대한 챌린지를 찾을 수 없습니다.");
             }
 
-            // 클라이언트에서 전송된 clientDataJSON에서 챌린지 추출
-            byte[] clientDataJSON = request.getCredential().getResponse().getClientDataJSON();
+            // 클라이언트에서 전송된 clientDataJSON을 Base64 디코딩하여 바이트 배열로 변환
+            byte[] clientDataJSON = Base64Util.fromBase64(request.getCredential().getResponse().getClientDataJSON());
+
+            // 디코딩된 바이트 배열을 JSON으로 파싱
             ObjectMapper objectMapper = new ObjectMapper();
-            JsonNode clientData = objectMapper.readTree(new String(clientDataJSON));
+            JsonNode clientData = objectMapper.readTree(new String(clientDataJSON, StandardCharsets.UTF_8));
             String clientChallenge = clientData.get("challenge").asText();
             log.info("클라이언트에서 받은 챌린지 (Base64): {}", clientChallenge);
 
             // Base64로 인코딩된 챌린지를 디코딩하여 비교 (Base64Util 사용)
-            byte[] decodedClientChallenge = Base64Util.fromBase64Url(clientChallenge).getBytes();
+            byte[] decodedClientChallenge = Base64Util.fromBase64(clientChallenge);
             log.info("디코딩된 클라이언트 챌린지: {}", Base64.getUrlEncoder().encodeToString(decodedClientChallenge));
 
             // 클라이언트에서 전송된 챌린지와 비교
             if (!Arrays.equals(expectedChallenge, decodedClientChallenge)) {
-                log.error("클라이언트에서 받은 챌린지가 일치하지 않습니다. 사용자 이름: {}", username);
+                log.info("클라이언트에서 받은 챌린지가 일치하지 않습니다. 사용자 이름: {}", username);
                 throw new IllegalArgumentException("클라이언트에서 받은 챌린지가 일치하지 않습니다.");
             }
 
@@ -142,7 +145,7 @@ public class AuthService {
             log.info("사용자 등록 완료: {}", username);  // 사용자 등록 완료 로그
 
         } catch (IllegalArgumentException | JsonProcessingException | RegistrationFailedException e) {
-            log.error("사용자 등록 실패: {}", e.getMessage(), e);
+            log.info("사용자 등록 실패: {}", e.getMessage(), e);
             throw new RuntimeException("사용자 등록에 실패했습니다.", e);
         }
     }
@@ -161,7 +164,7 @@ public class AuthService {
 
             return finishAuthentication(credential);
         } catch (Exception e) {
-            log.error("사용자 인증 실패: {}", e.getMessage(), e);
+            log.info("사용자 인증 실패: {}", e.getMessage(), e);
             return false;
         }
     }
@@ -195,10 +198,11 @@ public class AuthService {
     private PublicKeyCredential<AuthenticatorAttestationResponse, ClientRegistrationExtensionOutputs> buildRegistrationCredential(
             RegistrationRequest request) {
         try {
-            ByteArray id = new ByteArray(request.getCredential().getId().getBytes());
-            ByteArray rawId = new ByteArray(request.getCredential().getRawId());
-            ByteArray clientDataJSON = new ByteArray(request.getCredential().getResponse().getClientDataJSON());
-            ByteArray attestationObject = new ByteArray(request.getCredential().getResponse().getAttestationObject());
+            // URL-safe Base64 문자열을 일반 Base64로 변환하여 처리
+            ByteArray id = Base64Util.fromBase64ToByteArray(request.getCredential().getId());
+            ByteArray rawId = Base64Util.fromBase64ToByteArray(request.getCredential().getRawId());
+            ByteArray clientDataJSON = Base64Util.fromBase64ToByteArray(request.getCredential().getResponse().getClientDataJSON());
+            ByteArray attestationObject = Base64Util.fromBase64ToByteArray(request.getCredential().getResponse().getAttestationObject());
 
             // AttestationResponse 빌드
             AuthenticatorAttestationResponse attestationResponse = AuthenticatorAttestationResponse.builder()
@@ -212,8 +216,8 @@ public class AuthService {
                     .response(attestationResponse)
                     .clientExtensionResults(request.getClientExtensionResults())
                     .build();
-        } catch (IllegalArgumentException | IOException | Base64UrlException e) {
-            log.error("등록 자격 증명 생성 중 오류 발생: {}", e.getMessage(), e);
+        } catch (IllegalArgumentException | Base64UrlException | IOException e) {
+            log.info("등록 자격 증명 생성 중 오류 발생: {}", e.getMessage(), e);
             throw new RuntimeException("등록 자격 증명 생성 중 오류가 발생했습니다.", e);
         }
     }
@@ -222,21 +226,28 @@ public class AuthService {
     private PublicKeyCredential<AuthenticatorAssertionResponse, ClientAssertionExtensionOutputs> buildAuthenticationCredential(
             AuthenticationRequest request) {
         try {
-            ByteArray id = Base64Util.fromBase64Url(request.getId());
-            ByteArray clientDataJSON = Base64Util.fromBase64Url(request.getAssertion().getClientDataJSON());
-            ByteArray authenticatorData = Base64Util.fromBase64Url(request.getAssertion().getAuthenticatorData());
-            ByteArray signature = Base64Util.fromBase64Url(request.getAssertion().getSignature());
+            // 일반 Base64 -> ByteArray로 변환하여 처리
+            ByteArray id = new ByteArray(Base64.getDecoder().decode(request.getId()));
+            ByteArray clientDataJSON = new ByteArray(Base64.getDecoder().decode(request.getAssertion().getClientDataJSON()));
+            ByteArray authenticatorData = new ByteArray(Base64.getDecoder().decode(request.getAssertion().getAuthenticatorData()));
+            ByteArray signature = new ByteArray(Base64.getDecoder().decode(request.getAssertion().getSignature()));
             ByteArray userHandle = request.getAssertion().getUserHandle() != null
-                    ? Base64Util.fromBase64Url(request.getAssertion().getUserHandle())
+                    ? new ByteArray(Base64.getDecoder().decode(request.getAssertion().getUserHandle()))
                     : null;
 
             // AssertionResponse 빌드
-            AuthenticatorAssertionResponse assertionResponse = AuthenticatorAssertionResponse.builder()
-                    .authenticatorData(authenticatorData)
-                    .clientDataJSON(clientDataJSON)
-                    .signature(signature)
-                    .userHandle(userHandle)
-                    .build();
+            AuthenticatorAssertionResponse assertionResponse;
+            try {
+                assertionResponse = AuthenticatorAssertionResponse.builder()
+                        .authenticatorData(authenticatorData)
+                        .clientDataJSON(clientDataJSON)
+                        .signature(signature)
+                        .userHandle(userHandle)
+                        .build();
+            } catch (IOException e) {
+                log.info("AssertionResponse 빌드 실패: {}", e.getMessage(), e);
+                throw new RuntimeException("AssertionResponse 빌드 중 오류 발생", e);
+            }
 
             // PublicKeyCredential 객체 생성
             return PublicKeyCredential.<AuthenticatorAssertionResponse, ClientAssertionExtensionOutputs>builder()
@@ -245,9 +256,9 @@ public class AuthService {
                     .clientExtensionResults(request.getClientExtensionResults())
                     .type(PublicKeyCredentialType.PUBLIC_KEY)
                     .build();
-        } catch (IllegalArgumentException | IOException | Base64UrlException e) {
-            log.error("Base64 URL 디코딩 실패: {}", e.getMessage(), e);
-            throw new RuntimeException("Base64 URL 디코딩에 실패했습니다.", e);
+        } catch (IllegalArgumentException | Base64UrlException e) {
+            log.info("Base64 디코딩 실패: {}", e.getMessage(), e);
+            throw new RuntimeException("Base64 디코딩에 실패했습니다.", e);
         }
     }
 
@@ -307,7 +318,7 @@ public class AuthService {
         Optional<Passkey> passkeyOpt = passkeyRepository.findById(credential.getId().getBase64());
 
         if (passkeyOpt.isEmpty()) {
-            log.error("해당 자격 증명 ID에 대한 Passkey를 찾을 수 없습니다: {}", credential.getId().getBase64());
+            log.info("해당 자격 증명 ID에 대한 Passkey를 찾을 수 없습니다: {}", credential.getId().getBase64());
             return false;
         }
 
@@ -324,7 +335,7 @@ public class AuthService {
             log.info("사용자 {}의 Assertion 결과: {}", user.getUsername(), result.isSuccess());
             return result.isSuccess();
         } catch (AssertionFailedException e) {
-            log.error("Assertion 실패: {}", e.getMessage(), e);
+            log.info("Assertion 실패: {}", e.getMessage(), e);
             return false;
         }
     }
