@@ -81,7 +81,17 @@ export const usePasskey = () => {
       console.log('Serialized data:', JSON.stringify(payload));
       console.log(payload);
 
-      await api.post('/auth/register', payload);
+      const response = await api.post('/auth/register', payload);
+
+      // 응답 전체 구조 로그
+      console.log('응답 전체 구조:', response);
+
+      // 응답 데이터 검사
+      if (response.status === '성공') {
+        console.log('등록 성공:', response.data);
+      } else {
+        console.error('등록 실패:', response.data?.message || '알 수 없는 오류');
+      }
 
       return true;
     } catch (err) {
@@ -93,56 +103,67 @@ export const usePasskey = () => {
 
   const authenticateWithPasskey = async (username: string) => {
     try {
-      const options = await api.get('/auth/login-options');
+        const response = await api.get('/auth/login-options');
+        const options = response.data;
 
-      console.log('Received login options:', options);
+        console.log('Received login options:', options);
 
-      if (options && options.challenge) {
-        // Base64 URL-safe 형식으로 변환
-        options.challenge = base64UrlToBuffer(options.challenge);
+        // Ensure 'challenge' is correctly formatted as an ArrayBuffer
+        if (options && options.challenge) {
+            options.challenge = base64UrlToBuffer(options.challenge);
 
-        if (options.allowCredentials) {
-          options.allowCredentials = options.allowCredentials.map((cred: any) => ({
-            ...cred,
-            id: base64ToBuffer(cred.id), // 일반 Base64 처리
-          }));
+            if (options.allowCredentials) {
+                options.allowCredentials = options.allowCredentials.map((cred: any) => ({
+                    ...cred,
+                    id: base64ToBuffer(cred.id),
+                }));
+            }
+        } else {
+            throw new Error('Challenge is missing in the options.');
         }
-      }
 
-      const credential = await navigator.credentials.get({
-        publicKey: options,
-      }) as PublicKeyCredential;
+        // Ensure 'options' has the 'publicKey' property and it includes the required fields
+        const publicKeyOptions: PublicKeyCredentialRequestOptions = {
+            challenge: options.challenge,
+            allowCredentials: options.allowCredentials,
+            // Add any other required fields based on your authentication needs
+        };
 
-      const payload = {
-        username,
-        challenge: Array.from(new Uint8Array(options.challenge)), // 서버에 challenge 보내기
-        credential: {
-          id: bufferToBase64Url(credential.rawId), // URL-safe Base64로 변환 후 전송
-          rawId: bufferToBase64Url(credential.rawId), // URL-safe Base64로 변환 후 전송
-          type: credential.type,
-          response: {
-            authenticatorData: bufferToBase64Url((credential.response as AuthenticatorAssertionResponse).authenticatorData), // URL-safe Base64로 변환 후 전송
-            clientDataJSON: bufferToBase64Url((credential.response as AuthenticatorAssertionResponse).clientDataJSON), // URL-safe Base64로 변환 후 전송
-            signature: bufferToBase64Url((credential.response as AuthenticatorAssertionResponse).signature), // URL-safe Base64로 변환 후 전송
-            userHandle: (credential.response as AuthenticatorAssertionResponse).userHandle
-              ? bufferToBase64Url((credential.response as AuthenticatorAssertionResponse).userHandle as ArrayBuffer)
-              : null,
-          },
-        },
-      };
+        const credential = await navigator.credentials.get({
+            publicKey: publicKeyOptions,
+        }) as PublicKeyCredential;
 
-      console.log('Serialized data:', JSON.stringify(payload));
-      console.log(payload);
+        const payload = {
+            username,
+            challenge: Array.from(new Uint8Array(options.challenge)),
+            credential: {
+                id: bufferToBase64Url(credential.rawId),
+                rawId: bufferToBase64Url(credential.rawId),
+                type: credential.type,
+                response: {
+                    authenticatorData: bufferToBase64Url((credential.response as AuthenticatorAssertionResponse).authenticatorData),
+                    clientDataJSON: bufferToBase64Url((credential.response as AuthenticatorAssertionResponse).clientDataJSON),
+                    signature: bufferToBase64Url((credential.response as AuthenticatorAssertionResponse).signature),
+                    userHandle: (credential.response as AuthenticatorAssertionResponse).userHandle
+                        ? bufferToBase64Url((credential.response as AuthenticatorAssertionResponse).userHandle as ArrayBuffer)
+                        : null,
+                },
+            },
+        };
 
-      await api.post('/auth/login', payload);
+        console.log('Serialized data:', JSON.stringify(payload));
+        console.log("Sending payload:", payload);
 
-      return true;
+        await api.post('/auth/login', payload);
+
+        return true;
     } catch (err) {
-      console.error('Error during authentication:', err);
-      setError((err as Error).message);
-      return false;
+        console.error('Error during authentication:', err);
+        setError((err as Error).message);
+        return false;
     }
-  };
+};
+
 
   return { registerPasskey, authenticateWithPasskey, error };
 };
