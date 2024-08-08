@@ -14,17 +14,20 @@ public class AuthenticationRequest {
     private String rawId;
     private AuthenticatorAssertionResponseDTO assertion;
     private ClientAssertionExtensionOutputs clientExtensionResults;
+    private String challenge; // 챌린지 필드 추가
 
     @JsonCreator
     public AuthenticationRequest(
             @JsonProperty("id") String id,
             @JsonProperty("rawId") String rawId,
             @JsonProperty("assertion") AuthenticatorAssertionResponseDTO assertion,
-            @JsonProperty("clientExtensionResults") ClientAssertionExtensionOutputs clientExtensionResults) {
+            @JsonProperty("clientExtensionResults") ClientAssertionExtensionOutputs clientExtensionResults,
+            @JsonProperty("challenge") String challenge) { // 챌린지 매개변수 추가
         this.id = id;
         this.rawId = rawId;
         this.assertion = assertion;
         this.clientExtensionResults = clientExtensionResults;
+        this.challenge = challenge; // 챌린지 필드 초기화
     }
 
     @Data

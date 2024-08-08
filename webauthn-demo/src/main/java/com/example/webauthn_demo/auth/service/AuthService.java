@@ -174,7 +174,14 @@ public class AuthService {
                 .extensions(extensionInputs)
                 .build();
 
-        return relyingParty.startAssertion(startAssertionOptions);
+        AssertionRequest assertionRequest = relyingParty.startAssertion(startAssertionOptions);
+
+        // 생성된 챌린지를 Redis에 저장
+        ByteArray challenge = assertionRequest.getPublicKeyCredentialRequestOptions().getChallenge();
+        String challengeKey = "authentication:" + challenge.getBase64Url();
+        challengeService.saveChallenge(challengeKey, challenge.getBytes());
+
+        return assertionRequest;
     }
 
 
@@ -184,7 +191,28 @@ public class AuthService {
             PublicKeyCredential<AuthenticatorAssertionResponse, ClientAssertionExtensionOutputs> credential =
                     buildAuthenticationCredential(request);
 
-            return finishAuthentication(credential);
+            // 클라이언트로부터 받은 챌린지 가져오기
+            String clientChallenge = request.getChallenge(); // request에서 챌린지를 가져온다고 가정
+            byte[] expectedChallenge = challengeService.getChallenge("authentication:" + clientChallenge);
+
+            if (expectedChallenge == null) {
+                log.info("Redis에서 챌린지를 찾을 수 없습니다.");
+                return false;
+            }
+
+            // 클라이언트로부터 받은 챌린지와 비교
+            if (!Arrays.equals(expectedChallenge, clientChallenge.getBytes(StandardCharsets.UTF_8))) {
+                log.info("클라이언트의 챌린지가 일치하지 않습니다.");
+                return false;
+            }
+
+            // 챌린지 검증이 성공하면 인증 절차를 완료
+            boolean result = finishAuthentication(credential);
+
+            // 인증 완료 후 챌린지를 Redis에서 삭제
+            challengeService.deleteChallenge("authentication:" + clientChallenge);
+
+            return result;
         } catch (Exception e) {
             log.info("사용자 인증 실패: {}", e.getMessage(), e);
             return false;
@@ -341,20 +369,30 @@ public class AuthService {
         log.info("Redis에서 챌린지가 삭제되었습니다. 사용자 이름={}", username);
     }
 
-    // 사용자 인증을 완료하는 메서드
     private boolean finishAuthentication(PublicKeyCredential<AuthenticatorAssertionResponse, ClientAssertionExtensionOutputs> credential) {
-        Optional<Passkey> passkeyOpt = passkeyRepository.findById(credential.getId().getBase64());
+        // Optional에서 값을 안전하게 꺼내기
+        Optional<ByteArray> userHandleOpt = credential.getResponse().getUserHandle();
 
-        if (passkeyOpt.isEmpty()) {
-            log.info("해당 자격 증명 ID에 대한 Passkey를 찾을 수 없습니다: {}", credential.getId().getBase64());
+        if (userHandleOpt.isEmpty()) {
+            log.info("User handle이 없습니다.");
             return false;
         }
 
-        Passkey passkey = passkeyOpt.get();
-        User user = passkey.getUser();
+        ByteArray userHandle = userHandleOpt.get();
+        String userHandleString = new String(userHandle.getBytes(), StandardCharsets.UTF_8);
 
         try {
-            // Assertion 완료
+            Long userId = Long.valueOf(userHandleString);
+            Optional<Passkey> passkeyOpt = passkeyRepository.findByUserId(userId);
+
+            if (passkeyOpt.isEmpty()) {
+                log.info("해당 User ID에 대한 Passkey를 찾을 수 없습니다: {}", userId);
+                return false;
+            }
+
+            Passkey passkey = passkeyOpt.get();
+            User user = passkey.getUser();
+
             AssertionResult result = relyingParty.finishAssertion(FinishAssertionOptions.builder()
                     .request(relyingParty.startAssertion(StartAssertionOptions.builder().build()))
                     .response(credential)
@@ -362,11 +400,18 @@ public class AuthService {
 
             log.info("사용자 {}의 Assertion 결과: {}", user.getUsername(), result.isSuccess());
             return result.isSuccess();
-        } catch (AssertionFailedException e) {
+        } catch (Exception e) {
             log.info("Assertion 실패: {}", e.getMessage(), e);
             return false;
         }
     }
+
+
+
+
+
+
+
 
     // PublicKeyCredentialCreationOptions 객체를 Map으로 변환하는 메서드
     public Map<String, Object> convertToMap(PublicKeyCredentialCreationOptions options) {

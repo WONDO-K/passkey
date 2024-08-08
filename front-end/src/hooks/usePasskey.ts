@@ -169,7 +169,7 @@ export const usePasskey = () => {
           rawId:payload.credential.rawId,
           assertion:payload.credential.response,
           clientExtensionResults:{},
-
+          challenge: Array.from(new Uint8Array(options.challenge)), // 챌린지를 포함
         }
         await api.post('/auth/login', Data);
         //await api.post('/auth/login', JSON.stringify(payload));

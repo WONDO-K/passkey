@@ -1,11 +1,13 @@
 package com.example.webauthn_demo.auth.repository;
 
+import com.example.webauthn_demo.auth.model.Passkey;
 import com.yubico.webauthn.CredentialRepository;
 import com.yubico.webauthn.RegisteredCredential;
 import com.yubico.webauthn.data.ByteArray;
 import com.yubico.webauthn.data.PublicKeyCredentialDescriptor;
 import org.springframework.stereotype.Repository;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Optional;
 import java.util.Set;
@@ -41,8 +43,17 @@ public class WebAuthnCredentialRepository implements CredentialRepository {
 
     @Override
     public Optional<String> getUsernameForUserHandle(ByteArray userHandle) {
-        return passkeyRepository.findByUserIdBytes(userHandle.getBytes())
-                .map(passkey -> passkey.getUser().getUsername());
+        String userHandleStr = new String(userHandle.getBytes(), StandardCharsets.UTF_8);
+        Long userId = Long.valueOf(userHandleStr);
+
+        Optional<Passkey> passkeyOpt = passkeyRepository.findByUserId(userId);
+
+        if (passkeyOpt.isEmpty()) {
+            // 기존 방식대로 byte[]로 조회
+            passkeyOpt = passkeyRepository.findByUserIdBytes(userHandle.getBytes());
+        }
+
+        return passkeyOpt.map(passkey -> passkey.getUser().getUsername());
     }
 
     @Override
