@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @RestController
@@ -55,9 +56,14 @@ public class AuthController {
     public ResponseEntity<?> getLoginOptions(HttpSession session) {
         try {
             log.info("Received login-options request");
-            AssertionRequest options = authService.startAuthentication();
-            log.info("Generated login-options");
-            return ResponseEntity.ok(options);
+            AssertionRequest assertionRequest = authService.startAuthentication();
+            log.info("AssertionRequest options: {}", assertionRequest);
+
+            // AssertionRequest에서 publicKeyCredentialRequestOptions만 추출하여 응답으로 반환
+            Map<String, Object> response = new HashMap<>();
+            response.put("publicKeyCredentialRequestOptions", assertionRequest.getPublicKeyCredentialRequestOptions());
+            log.info("Generated login-options: {}", response);
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.info("Error generating login-options", e);
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

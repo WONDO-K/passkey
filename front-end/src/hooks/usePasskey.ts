@@ -104,29 +104,40 @@ export const usePasskey = () => {
   const authenticateWithPasskey = async (username: string) => {
     try {
         const response = await api.get('/auth/login-options');
-        const options = response.data;
+        
+        // 전체 응답 객체를 콘솔에 출력
+        console.log('response:', response);
 
-        console.log('Received login options:', options);
+        // 서버 응답에서 AssertionRequest의 publicKeyCredentialRequestOptions를 추출
+        const options = response.publicKeyCredentialRequestOptions;
+
+        if (!options) {
+            throw new Error('PublicKeyCredentialRequestOptions is missing in the response.');
+        }
 
         // Ensure 'challenge' is correctly formatted as an ArrayBuffer
-        if (options && options.challenge) {
+        if (options.challenge) {
             options.challenge = base64UrlToBuffer(options.challenge);
 
-            if (options.allowCredentials) {
+            if (options.allowCredentials && options.allowCredentials.length > 0) {
                 options.allowCredentials = options.allowCredentials.map((cred: any) => ({
                     ...cred,
                     id: base64ToBuffer(cred.id),
                 }));
+            } else {
+                options.allowCredentials = []; // allowCredentials이 null 또는 비어있을 경우 빈 배열로 설정
             }
         } else {
             throw new Error('Challenge is missing in the options.');
         }
 
-        // Ensure 'options' has the 'publicKey' property and it includes the required fields
         const publicKeyOptions: PublicKeyCredentialRequestOptions = {
             challenge: options.challenge,
-            allowCredentials: options.allowCredentials,
-            // Add any other required fields based on your authentication needs
+            allowCredentials: options.allowCredentials, 
+            rpId: options.rpId || 'localhost', // 기본값 설정
+            timeout: options.timeout || 60000, // 기본값 설정
+            userVerification: options.userVerification || 'preferred', // 기본값 설정
+            extensions: {} // 기본값 설정
         };
 
         const credential = await navigator.credentials.get({
@@ -152,9 +163,16 @@ export const usePasskey = () => {
         };
 
         console.log('Serialized data:', JSON.stringify(payload));
-        console.log("Sending payload:", payload);
+        console.log('Sending payload:', payload);
+        const Data = {
+          id:payload.credential.id,
+          rawId:payload.credential.rawId,
+          assertion:payload.credential.response,
+          clientExtensionResults:{},
 
-        await api.post('/auth/login', payload);
+        }
+        await api.post('/auth/login', Data);
+        //await api.post('/auth/login', JSON.stringify(payload));
 
         return true;
     } catch (err) {
@@ -163,7 +181,6 @@ export const usePasskey = () => {
         return false;
     }
 };
-
 
   return { registerPasskey, authenticateWithPasskey, error };
 };

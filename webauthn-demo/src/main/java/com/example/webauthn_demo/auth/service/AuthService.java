@@ -94,6 +94,18 @@ public class AuthService {
                             PublicKeyCredentialParameters.builder()
                                     .alg(COSEAlgorithmIdentifier.RS256)
                                     .type(PublicKeyCredentialType.PUBLIC_KEY)
+                                    .build(),
+                            PublicKeyCredentialParameters.builder()
+                                    .alg(COSEAlgorithmIdentifier.ES512) // 추가 알고리즘 예시
+                                    .type(PublicKeyCredentialType.PUBLIC_KEY)
+                                    .build(),
+                            PublicKeyCredentialParameters.builder()
+                                    .alg(COSEAlgorithmIdentifier.ES384) // 추가 알고리즘 예시
+                                    .type(PublicKeyCredentialType.PUBLIC_KEY)
+                                    .build(),
+                            PublicKeyCredentialParameters.builder()
+                                    .alg(COSEAlgorithmIdentifier.RS1) // 클라이언트가 사용하는 알고리즘 추가
+                                    .type(PublicKeyCredentialType.PUBLIC_KEY)
                                     .build()
                     ))
                     .build();
@@ -153,8 +165,18 @@ public class AuthService {
     // 인증 절차를 시작하는 메서드
     public AssertionRequest startAuthentication() {
         log.info("인증 절차를 시작합니다.");
-        return relyingParty.startAssertion(StartAssertionOptions.builder().build());
+
+        // AssertionExtensionInputs 객체를 기본값으로 설정 (appid 생략)
+        AssertionExtensionInputs extensionInputs = AssertionExtensionInputs.builder().build();
+
+        // StartAssertionOptions를 기본 설정으로 생성하고 extensions를 포함
+        StartAssertionOptions startAssertionOptions = StartAssertionOptions.builder()
+                .extensions(extensionInputs)
+                .build();
+
+        return relyingParty.startAssertion(startAssertionOptions);
     }
+
 
     // 사용자 인증을 완료하는 메서드
     public boolean authenticateUser(AuthenticationRequest request) {
@@ -226,6 +248,7 @@ public class AuthService {
     private PublicKeyCredential<AuthenticatorAssertionResponse, ClientAssertionExtensionOutputs> buildAuthenticationCredential(
             AuthenticationRequest request) {
         try {
+            log.info("Request : {}", request);
             // URL-safe Base64 -> ByteArray로 변환하여 처리
             ByteArray id = new ByteArray(Base64Util.fromBase64UrlToByteArray(request.getId()));
             ByteArray clientDataJSON = new ByteArray(Base64Util.fromBase64UrlToByteArray(request.getAssertion().getClientDataJSON()));
@@ -291,6 +314,11 @@ public class AuthService {
                                 .alg(COSEAlgorithmIdentifier.ES256)
                                 .type(PublicKeyCredentialType.PUBLIC_KEY)
                                 .build()))
+                        .pubKeyCredParams(List.of(PublicKeyCredentialParameters.builder()
+                                .alg(COSEAlgorithmIdentifier.RS256)
+                                .type(PublicKeyCredentialType.PUBLIC_KEY)
+                                .build())
+                        )
                         .build())
                 .response(credential)
                 .build();
