@@ -19,6 +19,9 @@ public class Passkey {
     @Column(length = 255, nullable = false)
     private String rawId;  // rawId 필드를 추가
 
+    @Column(length = 255, nullable = false)
+    private String username;  // username 필드 추가
+
     @ManyToOne
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
