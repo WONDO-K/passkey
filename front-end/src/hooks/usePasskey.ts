@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api } from '../services/api';
-
+import { Getwithparams } from '../services/api';
 // Base64 URL-safe 형식을 일반 Base64로 변환한 후 ArrayBuffer로 변환하는 함수
 function base64UrlToArrayBuffer(base64Url: string): ArrayBuffer {
   // Base64 URL-safe 문자열을 일반 Base64로 변환
@@ -103,7 +103,7 @@ export const usePasskey = () => {
 
   const authenticateWithPasskey = async (username: string) => {
     try {
-      const response = await api.get('/auth/login-options');
+      const response = await Getwithparams('/auth/login-options', { "username":username });
       console.info('응답:', response);
 
       const options = response.publicKeyCredentialRequestOptions;

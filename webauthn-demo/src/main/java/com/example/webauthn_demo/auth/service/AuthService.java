@@ -137,8 +137,8 @@ public class AuthService {
         }
     }
 
-    public AssertionRequest startAuthentication() {
-        log.info("인증 절차를 시작합니다.");
+    public AssertionRequest startAuthentication(String username) {
+        log.info("인증 절차를 시작합니다. 사용자 이름: {}", username);
 
         StartAssertionOptions startAssertionOptions = StartAssertionOptions.builder()
                 .extensions(AssertionExtensionInputs.builder().build())
@@ -147,8 +147,11 @@ public class AuthService {
         AssertionRequest assertionRequest = relyingParty.startAssertion(startAssertionOptions);
 
         ByteArray challenge = assertionRequest.getPublicKeyCredentialRequestOptions().getChallenge();
-        // 수정된 부분
-        challengeService.saveChallenge("authentication:" + Base64Util.toBase64Url(challenge.getBytes()), challenge.getBytes());
+
+        // Redis에 챌린지를 저장
+        challengeService.saveChallenge(username, challenge.getBytes());
+
+        log.info("startAuthentication Redis에 저장된 인증 챌린지: {}", challenge.getBase64Url());
 
         return assertionRequest;
     }
@@ -156,30 +159,75 @@ public class AuthService {
     public boolean authenticateUser(AuthenticationRequest request) {
         try {
             log.info("authenticateUser의 request: {}", request);
+
+            // 클라이언트로부터 받은 자격 증명을 PublicKeyCredential 객체로 변환
             PublicKeyCredential<AuthenticatorAssertionResponse, ClientAssertionExtensionOutputs> credential =
                     buildAuthenticationCredential(request);
 
-            // 수정된 부분
-            byte[] clientChallenge = Base64Util.fromBase64UrlToByteArray(request.getChallenge());
-            log.info("클라이언트 챌린지: {}", Base64Util.toBase64Url(clientChallenge));
-            byte[] expectedChallenge = challengeService.getChallenge("authentication:" + Base64Util.toBase64Url(clientChallenge));
+            // Redis에서 저장된 챌린지 가져오기
+            byte[] expectedChallenge = challengeService.getChallenge(request.getUsername());
             log.info("Redis에서 저장된 챌린지: {}", Base64Util.toBase64Url(expectedChallenge));
 
+            // 클라이언트로부터 받은 챌린지와 비교
+            byte[] clientChallenge = Base64Util.fromBase64UrlToByteArray(request.getChallenge());
+            log.info("클라이언트로부터 받은 챌린지: {}", Base64Util.toBase64Url(clientChallenge));
+
             if (expectedChallenge == null || !Arrays.equals(expectedChallenge, clientChallenge)) {
-                log.info("클라이언트의 챌린지가 일치하지 않습니다.");
+                log.error("클라이언트의 챌린지가 일치하지 않습니다.");
                 return false;
             }
-            log.info("credential: {}", credential);
-            log.info("request.getUsername(): {}", request.getUsername());
-            boolean result = finishAuthentication(credential, request.getUsername());
-            challengeService.deleteChallenge("authentication:" + Base64Util.toBase64Url(clientChallenge));
+
+            log.info("클라이언트의 챌린지가 일치합니다.");
+
+            // 기존의 AssertionRequest를 생성하고 finishAuthentication에 전달
+            AssertionRequest assertionRequest = createAssertionRequest(request.getUsername(), expectedChallenge);
+
+            log.info("AssertionRequest.getUsername: {}", assertionRequest.getUsername());
+
+            // Credential ID 디버깅 정보 출력
+            log.info("서버가 기대하는 Credential ID 목록: {}", assertionRequest.getPublicKeyCredentialRequestOptions().getAllowCredentials());
+
+            boolean result = finishAuthentication(credential, assertionRequest);
+
+            // 인증이 완료되면 Redis에서 챌린지를 삭제
+            challengeService.deleteChallenge(request.getUsername());
 
             return result;
         } catch (Exception e) {
-            log.info("사용자 인증 실패: {}", e.getMessage(), e);
+            log.error("사용자 인증 실패: {}", e.getMessage(), e);
             return false;
         }
     }
+
+    private AssertionRequest createAssertionRequest(String username, byte[] challenge) {
+        Optional<Passkey> passkeyOpt = passkeyRepository.findByUsername(username);
+
+        if (passkeyOpt.isEmpty()) {
+            log.error("사용자 {}에 대한 Passkey가 존재하지 않습니다.", username);
+            throw new IllegalArgumentException("사용자에 대한 Passkey가 없습니다.");
+        }
+
+        Passkey passkey = passkeyOpt.get();
+        List<PublicKeyCredentialDescriptor> allowCredentials = new ArrayList<>();
+
+        allowCredentials.add(PublicKeyCredentialDescriptor.builder()
+                .id(new ByteArray(Base64Util.fromBase64UrlToByteArray(passkey.getCredentialId())))
+                .type(PublicKeyCredentialType.PUBLIC_KEY)
+                .build());
+
+        log.info("생성된 AllowCredentials: {}", allowCredentials);
+
+        return AssertionRequest.builder()
+                .publicKeyCredentialRequestOptions(PublicKeyCredentialRequestOptions.builder()
+                        .challenge(new ByteArray(challenge))
+            .rpId("localhost") // Relying Party의 ID 설정
+                        .userVerification(UserVerificationRequirement.PREFERRED) // 사용자 확인 필요
+                        .allowCredentials(allowCredentials) // 생성된 AllowCredentials 사용
+                        .build())
+            .username(username)
+                .build();
+}
+
 
 
     // JSON에서 사용자 이름을 파싱하는 메서드
@@ -327,81 +375,60 @@ public class AuthService {
         log.info("Redis에서 챌린지가 삭제되었습니다. 사용자 이름={}", username);
     }
 
-//    private boolean finishAuthentication(PublicKeyCredential<AuthenticatorAssertionResponse, ClientAssertionExtensionOutputs> credential) {
-//        Optional<ByteArray> userHandleOpt = credential.getResponse().getUserHandle();
-//
-//        log.info("User handle: {}", userHandleOpt);
-//        if (userHandleOpt.isEmpty()) {
-//            log.info("User handle이 없습니다.");
-//            return false;
-//        }
-//
-//        ByteArray userHandle = userHandleOpt.get();
-//        String userHandleString = new String(userHandle.getBytes(), StandardCharsets.UTF_8);
-//        log.info("User handle: {}", userHandleString);
-//
-//        try {
-//            Long userId = Long.valueOf(userHandleString);
-//            Optional<Passkey> passkeyOpt = passkeyRepository.findByUserId(userId);
-//
-//            if (passkeyOpt.isEmpty()) {
-//                log.info("해당 User ID에 대한 Passkey를 찾을 수 없습니다: {}", userId);
-//                return false;
-//            }
-//
-//            Passkey passkey = passkeyOpt.get();
-//            User user = passkey.getUser();
-//
-//            FinishAssertionOptions options = FinishAssertionOptions.builder()
-//                    .request(relyingParty.startAssertion(StartAssertionOptions.builder().build()))
-//                    .response(credential)
-//                    .build();
-//
-//            AssertionResult result = relyingParty.finishAssertion(options);
-//
-//            log.info("사용자 {}의 Assertion이 완료되었습니다.", user.getUsername());
-//            return result.isSuccess();
-//        } catch (Exception e) {
-//            log.info("사용자 인증 처리 중 오류 발생: {}", e.getMessage(), e);
-//            return false;
-//        }
-//    }
-
-    public boolean finishAuthentication(PublicKeyCredential<AuthenticatorAssertionResponse, ClientAssertionExtensionOutputs> credential, String username) {
+    public boolean finishAuthentication(PublicKeyCredential<AuthenticatorAssertionResponse, ClientAssertionExtensionOutputs> credential, AssertionRequest assertionRequest) {
         try {
-            log.info("finishAuthentication 메서드에서 사용자 이름: {}", username);
+            log.info("finishAuthentication 메서드 호출");
 
-            // username을 사용하여 passkey를 조회합니다.
-            Optional<Passkey> passkeyOpt = passkeyRepository.findByUsername(username);
+            FinishAssertionOptions finishOptions = FinishAssertionOptions.builder()
+                    .request(assertionRequest)
+                    .response(credential)
+                    .build();
 
-            if (passkeyOpt.isEmpty()) {
-                log.info("해당 사용자에 대한 Passkey를 찾을 수 없습니다: {}", username);
+            // Credential ID와 Assertion Request 비교
+            ByteArray receivedCredentialId = credential.getId();
+            log.info("클라이언트로부터 받은 Credential ID: {}", receivedCredentialId.getBase64Url());
+
+            Optional<List<PublicKeyCredentialDescriptor>> allowCredentialsOpt = assertionRequest.getPublicKeyCredentialRequestOptions().getAllowCredentials();
+
+            if (allowCredentialsOpt.isPresent()) {
+                List<PublicKeyCredentialDescriptor> allowCredentials = allowCredentialsOpt.get();
+                log.info("서버가 기대하는 Credential ID 목록: {}", allowCredentials);
+
+                Optional<PublicKeyCredentialDescriptor> matchingCredential = allowCredentials.stream()
+                        .filter(c -> c.getId().equals(receivedCredentialId))
+                        .findFirst();
+
+                if (matchingCredential.isPresent()) {
+                    log.info("Credential ID가 일치합니다.");
+                } else {
+                    log.error("Credential ID가 일치하지 않습니다: 서버 기대 값 = {}, 클라이언트 제공 값 = {}",
+                            allowCredentials,
+                            receivedCredentialId.getBase64Url());
+                    return false;
+                }
+            } else {
+                log.error("AllowCredentials가 비어있습니다.");
                 return false;
             }
 
-            Passkey passkey = passkeyOpt.get();
-            User user = passkey.getUser();
+            // FinishAssertionOptions 객체 상태 확인
+            log.info("FinishAssertionOptions: {}", finishOptions);
 
-            // 사용자 이름을 사용하여 Assertion 요청을 시작합니다.
-            StartAssertionOptions startOptions = StartAssertionOptions.builder()
-                    .username(user.getUsername()) // 사용자 이름을 설정합니다.
-                    .build();
-
-            AssertionRequest assertionRequest = relyingParty.startAssertion(startOptions); // AssertionRequest를 얻습니다.
-
-            // FinishAssertionOptions를 설정합니다.
-            FinishAssertionOptions finishOptions = FinishAssertionOptions.builder()
-                    .request(assertionRequest) // AssertionRequest를 설정합니다.
-                    .response(credential) // 클라이언트로부터 받은 인증 응답을 설정합니다.
-                    .build();
-
-            // Assertion 처리를 수행하고 결과를 반환합니다.
             AssertionResult result = relyingParty.finishAssertion(finishOptions);
 
-            log.info("사용자 {}의 Assertion이 완료되었습니다.", user.getUsername());
-            return result.isSuccess();
+            if (result != null) {
+                log.info("사용자 {}의 Assertion이 완료되었습니다. 성공 여부: {}", result.getUsername(), result.isSuccess());
+                return result.isSuccess();
+            } else {
+                log.error("Assertion 결과가 null입니다. Assertion 실패.");
+                return false;
+            }
+
+        } catch (IllegalArgumentException e) {
+            log.error("사용자 인증 처리 중 IllegalArgumentException 발생: {}", e.getMessage(), e);
+            return false;
         } catch (Exception e) {
-            log.info("사용자 인증 처리 중 오류 발생: {}", e.getMessage(), e);
+            log.error("사용자 인증 처리 중 예기치 않은 오류 발생: {}", e.getMessage(), e);
             return false;
         }
     }

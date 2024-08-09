@@ -51,10 +51,10 @@ public class AuthController {
     }
 
     @GetMapping("/login-options")
-    public ResponseEntity<Map<String, Object>> getLoginOptions(HttpSession session) {
+    public ResponseEntity<Map<String, Object>> getLoginOptions(@RequestParam("username") String username) {
         try {
-            log.info("로그인 옵션 요청 수신");
-            AssertionRequest assertionRequest = authService.startAuthentication();
+            log.info("로그인 옵션 요청 수신 - username: {}", username);
+            AssertionRequest assertionRequest = authService.startAuthentication(username);
             Map<String, Object> response = new HashMap<>();
             response.put("publicKeyCredentialRequestOptions", assertionRequest.getPublicKeyCredentialRequestOptions());
             log.info("생성된 로그인 옵션: {}", response);
@@ -68,14 +68,14 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<Map<String, String>> login(@RequestBody AuthenticationRequest request) {
         try {
-            log.info("로그인 요청 수신: {}", request.getId());
+            log.info("로그인 요청 수신: {}", request.getUsername()); // username을 로그에 사용
 
             boolean success = authService.authenticateUser(request);
             if (success) {
-                log.info("사용자 인증 성공: {}", request.getId());
+                log.info("사용자 인증 성공: {}", request.getUsername()); // 인증 성공 메시지에 username 사용
                 return ResponseEntity.ok(Map.of("status", "성공"));
             } else {
-                log.info("사용자 인증 실패: {}", request.getId());
+                log.info("사용자 인증 실패: {}", request.getUsername()); // 인증 실패 메시지에 username 사용
                 return ResponseEntity.badRequest().body(Map.of("error", "인증 실패"));
             }
         } catch (Exception e) {
