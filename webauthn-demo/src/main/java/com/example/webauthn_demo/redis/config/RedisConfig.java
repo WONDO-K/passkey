@@ -1,4 +1,4 @@
-package com.example.webauthn_demo.config;
+package com.example.webauthn_demo.redis.config;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;

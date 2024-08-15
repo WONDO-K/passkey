@@ -1,3 +1,4 @@
+import axios from "axios";
 const API_BASE_URL = 'http://localhost:8080/api';
 
 export const api = {
@@ -36,4 +37,16 @@ export const api = {
       throw err;
     }
   },
+};
+
+
+export const Getwithparams = async (URL:string,params:any) => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}${URL}`, {
+      params: params
+    });
+    return response.data; // content 배열만 반환
+  } catch (error) {
+    console.error("데이터를 가져오는 중 오류가 발생했습니다!", error);
+  }
 };

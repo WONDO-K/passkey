@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @RestController
@@ -25,57 +26,61 @@ public class AuthController {
     @PostMapping("/register-options")
     public ResponseEntity<Map<String, Object>> getRegisterOptions(@RequestBody String usernameJson, HttpSession session) {
         try {
-            log.info("Received register-options request for username: {}", usernameJson);
+            log.info("사용자 등록 옵션 요청 수신: {}", usernameJson);
             PublicKeyCredentialCreationOptions options = authService.startRegistration(usernameJson, session);
             Map<String, Object> response = authService.convertToMap(options);
-            log.info("Generated register-options: {}", response);
+            log.info("생성된 사용자 등록 옵션: {}", response);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            log.error("Error generating register-options for username", e);
+            log.info("사용자 등록 옵션 생성 중 오류 발생: {}", e.getMessage());
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody RegistrationRequest request, HttpSession session) {
+    public ResponseEntity<Map<String, String>> register(@RequestBody RegistrationRequest request, HttpSession session) {
         try {
-            log.info("Received registration request for username: {}", request.getUsername());
+            log.info("사용자 등록 요청 수신: {}", request.getUsername());
             authService.registerUser(request, session);
-            return ResponseEntity.ok().build();
+            log.info("사용자 등록 성공: {}", request.getUsername());
+            return ResponseEntity.ok(Map.of("status", "성공"));
         } catch (Exception e) {
-            log.error("Registration failed for username: {}", request.getUsername(), e);
-            return ResponseEntity.badRequest().body(e.getMessage());
+            log.info("사용자 등록 실패: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
     @GetMapping("/login-options")
-    public ResponseEntity<AssertionRequest> getLoginOptions(HttpSession session) {
+    public ResponseEntity<Map<String, Object>> getLoginOptions(@RequestParam("username") String username) {
         try {
-            log.info("Received login-options request");
-            AssertionRequest options = authService.startAuthentication();
-            log.info("Generated login-options");
-            return ResponseEntity.ok(options);
+            log.info("로그인 옵션 요청 수신 - username: {}", username);
+            AssertionRequest assertionRequest = authService.startAuthentication(username);
+            Map<String, Object> response = new HashMap<>();
+            response.put("publicKeyCredentialRequestOptions", assertionRequest.getPublicKeyCredentialRequestOptions());
+            log.info("생성된 로그인 옵션: {}", response);
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
-            log.error("Error generating login-options", e);
-            return ResponseEntity.badRequest().body(null);
+            log.info("로그인 옵션 생성 중 오류 발생: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody AuthenticationRequest request) {
+    public ResponseEntity<Map<String, String>> login(@RequestBody AuthenticationRequest request) {
         try {
-            log.info("Received login request for id: {}", request.getId());
+            log.info("로그인 요청 수신: {}", request.getUsername()); // username을 로그에 사용
+
             boolean success = authService.authenticateUser(request);
             if (success) {
-                log.info("User authentication successful for id: {}", request.getId());
-                return ResponseEntity.ok().build();
+                log.info("사용자 인증 성공: {}", request.getUsername()); // 인증 성공 메시지에 username 사용
+                return ResponseEntity.ok(Map.of("status", "성공"));
             } else {
-                log.warn("Authentication failed for id: {}", request.getId());
-                return ResponseEntity.badRequest().body("Authentication failed");
+                log.info("사용자 인증 실패: {}", request.getUsername()); // 인증 실패 메시지에 username 사용
+                return ResponseEntity.badRequest().body(Map.of("error", "인증 실패"));
             }
         } catch (Exception e) {
-            log.error("Authentication failed for id: {}", request.getId(), e);
-            return ResponseEntity.badRequest().body("Authentication failed: " + e.getMessage());
+            log.info("사용자 인증 중 오류 발생: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", "인증 실패: " + e.getMessage()));
         }
     }
 }

@@ -12,4 +12,9 @@ public interface PasskeyRepository extends JpaRepository<Passkey, String> {
 
     @Query("SELECT p FROM Passkey p WHERE p.user.id = :userId")
     Optional<Passkey> findByUserIdBytes(byte[] userId);
+
+    @Query("SELECT p FROM Passkey p WHERE p.user.id = :userId")
+    Optional<Passkey> findByUserId(Long userId); // 새 메서드 추가
+
+    Optional<Passkey> findByUsername(String username);
 }
