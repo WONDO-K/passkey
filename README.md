@@ -6,45 +6,87 @@ FIDO2 기반의 비밀번호 없는 인증 시스템인 **Passkey 인증 방식*
 
 ---
 
-### 👨‍💻 담당 역할
+## 👨‍💻 담당 역할
 
-- **FIDO2/Passkey 인증 원리 학습** (PublicKeyCredential, Challenge-Response, Client Data 등)
-- **WebAuthn 프로토콜 흐름 분석 및 백엔드 구조 설계**
-- **Spring Boot 기반 Passkey 등록/인증 API 구현**
-- **Base64url/JSON 처리 및 오류 디버깅**
-- **Redis TTL 기반 Challenge 유효시간 관리**
-- **Yubico Java 라이브러리 적용 및 테스트 코드 작성**
-
----
-
-### 🛠 기술 스택
-
-`Java 17`, `Spring Boot 3`, `Spring Security`, `Redis`, `WebAuthn`, `Yubico Java Library`, `Base64Url`, `JWT`, `Postman`
+- **FIDO2/Passkey 인증 원리 학습** (PublicKeyCredential, Challenge-Response 구조 등)
+- **WebAuthn 프로토콜 분석 및 백엔드 로직 구현**
+- **Spring Boot 기반 Passkey 등록·인증 API 설계**
+- **Base64URL 디코딩 오류 해결(RFC 4648 기반 커스텀 디코더 구현)**
+- **Redis 기반 Challenge 상태 관리**
+- **브라우저(WebAuthn) · 서버 간 데이터 파싱 및 검증 흐름 구축**
 
 ---
 
-### 🚀 구현 내용 요약
+## 🛠 기술 스택
+
+`Java 17`, `Spring Boot 3`, `Redis`, `Spring Security`,  
+`WebAuthn (FIDO2)`, `Yubico Java Library`, `Base64URL`, `JWT`, `Postman`
+
+---
+
+## 🚀 Passkey 등록·인증 흐름 요약
 
 | 기능 구분 | 설명 |
-| --- | --- |
-| **1. Passkey 등록** | 클라이언트에서 생성한 PublicKeyCredential을 서버에서 파싱·검증하고, 등록 정보를 DB에 저장 |
-| **2. Challenge 발급** | 인증/등록 과정에서 Redis를 통해 TTL 기반 일회용 Challenge를 발급하고 검증 |
-| **3. Passkey 인증** | 클라이언트 서명값(Signature)을 서버에서 공용키 기반으로 검증하여 로그인 처리 |
-| **4. 보안 고려** | Challenge 재사용 방지, Base64url 인코딩/디코딩, JWT 기반 인증 토큰 발급 |
-| **5. 실습 환경** | WebAuthn 데모 페이지 및 Postman 활용한 시나리오 테스트 수행 |
+|----------|------|
+| **1. Passkey 등록** | 브라우저(WebAuthn)가 생성한 Attestation 데이터를 서버에서 파싱 및 검증 후 DB 저장 |
+| **2. Challenge 발급** | Redis에 Challenge 저장 → 응답 단계에서 비교하여 위변조 방지 |
+| **3. Passkey 인증** | 클라이언트 서명(Signature) 검증 → PublicKey 기반으로 서버에서 직접 검증 |
+| **4. Base64URL 처리** | WebAuthn 데이터의 URL-safe Base64를 RFC 4648 규칙으로 복원하여 충돌 해결 |
+| **5. 단계별 분기 처리** | 등록/인증 과정에서 예외 상황별로 정확한 검증 흐름 유지 |
 
 ---
 
-### 🔍 문제 해결 및 특이 사항
+## 📸 Passkey 시연 화면 (Frontend ↔ Backend 실제 연동 결과)
 
-- **Base64 vs Base64url 인코딩 차이**로 인한 서명 검증 오류 발생 → Java용 Base64url 처리 방식 재구현
-- **ClientDataJson의 UTF-8 Encoding 문제** 해결 → JSON 파싱 단계별 로깅 및 Yubico 라이브러리 내부 코드 분석
-- **도메인 기반 인증 제약** 우회 실험 (로컬 환경에서 인증 테스트 위한 조건 세팅)
+아래 화면들은 단순 UI 데모가 아니라,  
+**본 프로젝트의 Passkey 백엔드 로직(`AuthService`, `ChallengeService`, `Base64Util`)과 실제 WebAuthn 클라이언트가 연동되어 동작한 결과**입니다.
+
+### 1) Passkey 등록 입력 화면
+![Register UI](./image35.png)
+
+### 2) Windows Hello Passkey 생성 UI  
+(브라우저가 WebAuthn API를 통해 인증기(Authenticator) 호출)
+![Windows Credential Selection](./image36.png)
+
+### 3) 사용자 본인 인증(PIN/Biometrics) 단계  
+![PIN Authentication](./image37.png)
+
+### 4) 브라우저 콘솔 출력 – 서버 검증 완전 성공  
+서버가 Challenge 일치 여부, AuthenticatorData, ClientDataJSON, Signature 등을 모두 검증했음을 의미합니다.
+![Console Log](./image38.png)
 
 ---
 
-### 💬 회고
+## 🔍 문제 해결 및 기술적 특징
 
-비밀번호 없는 인증이라는 추상적인 개념을 실제 백엔드 로직으로 구현하면서, **FIDO2의 인증 흐름, 암호화 구조, 브라우저 클라이언트 역할**까지 폭넓게 이해할 수 있었습니다. 특히 세션 기반 인증보다 **보안성과 사용자 경험이 우수한 차세대 인증 흐름에 대한 이해**를 바탕으로, 이후 프로젝트(예: 반찬 고도화 버전, 공공서비스 인증 도입 등)에 적용 가능성을 실증할 수 있었습니다.
+### ✔ Base64URL → ByteArray 변환 충돌 해결  
+WebAuthn Credential에서 전달되는 ID, signature 등이  
+URL-safe Base64(`-`, `_`, padding 제거)로 인코딩되어 있어  
+Java 서버에서 디코딩이 실패하는 문제가 발생했습니다.
+
+이를 해결하기 위해 **RFC 4648 규칙 기반 커스텀 Base64URL 디코더**를 작성하여  
+패딩 복원 및 URL-safe 문자 변환 문제를 직접 해결했습니다.
+
+### ✔ Stateless 서버 환경(JWT)에서 Passkey 상태 관리 문제 해결  
+Passkey 인증은 특정 Challenge 상태를 유지해야 하므로  
+JWT 기반 stateless 환경과 충돌이 발생합니다.
+
+이를 해결하기 위해 Redis를 Challenge 저장소로 사용하여:  
+- 인증 요청마다 Challenge 생성  
+- Redis에 안전하게 저장  
+- 클라이언트 응답의 Challenge와 비교 검증  
+- 인증 성공 시 즉시 삭제하여 재사용 방지  
+
+라는 **단일 책임 구조의 안정적인 인증 흐름**을 구축했습니다.
 
 ---
+
+## 💬 회고
+
+Passkey 인증을 단순 개념이 아니라 **직접 백엔드 인증 흐름까지 구현해보며**,  
+WebAuthn 구조, 브라우저·OS 인증기 역할, 서명 검증 방식 등  
+보안 인증 체계를 깊이 있게 이해할 수 있었습니다.
+
+또한 기존 SMS OTP 기반 인증 대비  
+**보안성·사용성 모두 우수한 차세대 인증 방식을 직접 설계하고 검증했다는 점**에서  
+이후 프로젝트 확장(공공서비스 인증, 금융서비스 인증) 가능성을 확인할 수 있었습니다.
