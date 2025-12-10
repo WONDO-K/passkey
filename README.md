@@ -42,18 +42,18 @@ FIDO2 기반의 비밀번호 없는 인증 시스템인 **Passkey 인증 방식*
 **본 프로젝트의 Passkey 백엔드 로직(`AuthService`, `ChallengeService`, `Base64Util`)과 실제 WebAuthn 클라이언트가 연동되어 동작한 결과**입니다.
 
 ### 1) Passkey 등록 입력 화면
-![Register UI](.images/image1.png)
+![Register UI](./images/image1.png)
 
 ### 2) Windows Hello Passkey 생성 UI  
 (브라우저가 WebAuthn API를 통해 인증기(Authenticator) 호출)
-![Windows Credential Selection](.images/image2.png)
+![Windows Credential Selection](./images/image2.png)
 
 ### 3) 사용자 본인 인증(PIN/Biometrics) 단계  
-![PIN Authentication](.images/image3.png)
+![PIN Authentication](./images/image3.png)
 
 ### 4) 브라우저 콘솔 출력 – 서버 검증 완전 성공  
 서버가 Challenge 일치 여부, AuthenticatorData, ClientDataJSON, Signature 등을 모두 검증했음을 의미합니다.
-![Console Log](.images/image4.png)
+![Console Log](./images/image4.png)
 
 ---
 
