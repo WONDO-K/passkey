@@ -5,10 +5,10 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.redis.core.RedisHash;
 
 @Data
-@RedisHash("Challenge") // Redis에 저장할 해시 네임을 지정
+@RedisHash(value = "Challenge", timeToLive = 90) // 90초
 public class Challenge {
 
     @Id
-    private String username; // 사용자 이름을 키로 사용
-    private byte[] challenge; // 챌린지 데이터
+    private String username;
+    private byte[] challenge;
 }
